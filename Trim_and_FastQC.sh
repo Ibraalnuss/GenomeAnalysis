@@ -11,63 +11,51 @@
 
 set -euo pipefail
 
-### Modules ###
 module load bioinfo-tools
-module load FastQC
+module load FastQC/0.11.9
 module load trimmomatic/0.39
-module load MultiQC
+module load MultiQC/1.22.2
 
-### Configuration ###
-# Paired‐end raw data directories:
-RAW_DIRS=( \
-  "/proj/uppmax2025-3-3/Genome_Analysis/1_Zhang_2017/transcriptomics_data/RNA-Seq_Serum" \
-  "/proj/uppmax2025-3-3/Genome_Analysis/1_Zhang_2017/transcriptomics_data/RNA-Seq_BH" \
+RAW_DIRS=(
+  "/proj/uppmax2025-3-3/Genome_Analysis/1_Zhang_2017/transcriptomics_data/RNA-Seq_Serum"
+  "/proj/uppmax2025-3-3/Genome_Analysis/1_Zhang_2017/transcriptomics_data/RNA-Seq_BH"
 )
 
-# Output root directory:
 OUT_ROOT="/proj/uppmax2025-3-3/private/Efaecium_Project/analysis/qc/trimmed"
-mkdir -p "$OUT_ROOT"/{raw_qc,trimmed,trimmed_qc,multiqc}
+mkdir -p "$OUT_ROOT"/paired "$OUT_ROOT"/unpaired "$OUT_ROOT"/trimmed_qc "$OUT_ROOT"/multiqc
 
-# Adapter file:
-ADAPTERS="/proj/uppmax2025-3-3/private/FastQC/adapters/TruSeq3-PE.fa"
+ADAPTERS="$TRIMMOMATIC_ROOT/adapters/TruSeq3-PE.fa"
 
-# Sample IDs:
-SAMPLES=(ERR1797969 ERR1797970 ERR1797971 ERR1797972 ERR1797973 ERR1797974)
+SAMPLES=(1797969 1797970 1797971 1797972 1797973 1797974)
 
-### 1) FastQC on raw reads ###
-echo ">>> FastQC on RAW reads"
-for dir in "${RAW_DIRS[@]}"; do
-  for sample in "${SAMPLES[@]}"; do
-    fastqc -t 1 -o "$OUT_ROOT/raw_qc" \
-      "$dir/${sample}_1.fastq.gz" \
-      "$dir/${sample}_2.fastq.gz"
-  done
-done
+echo ">>> Trimmomatic PE trimming"
+for DIR in "${RAW_DIRS[@]}"; do
+  for SAMPLE in "${SAMPLES[@]}"; do
+    IN1="$DIR/trim_paired_ERR${SAMPLE}_pass_1.fastq.gz"
+    IN2="$DIR/trim_paired_ERR${SAMPLE}_pass_2.fastq.gz"
+    OUT1_P="$OUT_ROOT/paired/ERR${SAMPLE}_1.paired.fastq.gz"
+    OUT1_U="$OUT_ROOT/unpaired/ERR${SAMPLE}_1.unpaired.fastq.gz"
+    OUT2_P="$OUT_ROOT/paired/ERR${SAMPLE}_2.paired.fastq.gz"
+    OUT2_U="$OUT_ROOT/unpaired/ERR${SAMPLE}_2.unpaired.fastq.gz"
 
-### 2) Trimmomatic ###
-echo ">>> Trimmomatic trimming"
-for dir in "${RAW_DIRS[@]}"; do
-  for sample in "${SAMPLES[@]}"; do
     trimmomatic PE -threads 2 -phred33 \
-      "$dir/${sample}_1.fastq.gz" "$dir/${sample}_2.fastq.gz" \
-      "$OUT_ROOT/trimmed/${sample}_1.paired.fastq.gz"  "$OUT_ROOT/trimmed/${sample}_1.unpaired.fastq.gz" \
-      "$OUT_ROOT/trimmed/${sample}_2.paired.fastq.gz"  "$OUT_ROOT/trimmed/${sample}_2.unpaired.fastq.gz" \
+      "$IN1" "$IN2" \
+      "$OUT1_P" "$OUT1_U" \
+      "$OUT2_P" "$OUT2_U" \
       ILLUMINACLIP:"$ADAPTERS":2:30:10 \
       LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
   done
 done
 
-### 3) FastQC on trimmed pairs ###
-echo ">>> FastQC on TRIMMED reads"
-for sample in "${SAMPLES[@]}"; do
+echo ">>> FastQC on trimmed reads"
+for SAMPLE in "${SAMPLES[@]}"; do
   fastqc -t 1 -o "$OUT_ROOT/trimmed_qc" \
-    "$OUT_ROOT/trimmed/${sample}_1.paired.fastq.gz" \
-    "$OUT_ROOT/trimmed/${sample}_2.paired.fastq.gz"
+    "$OUT_ROOT/paired/ERR${SAMPLE}_1.paired.fastq.gz" \
+    "$OUT_ROOT/paired/ERR${SAMPLE}_2.paired.fastq.gz"
 done
 
-### 4) MultiQC ###
 echo ">>> Generating MultiQC report"
 cd "$OUT_ROOT"
-multiqc raw_qc trimmed_qc -o multiqc
+multiqc trimmed_qc -o multiqc
 
 echo "All done! See: $OUT_ROOT/multiqc/multiqc_report.html"
